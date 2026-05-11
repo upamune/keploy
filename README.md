@@ -174,6 +174,7 @@ Because Keploy intercepts at the **network layer (eBPF)**, it works with **any l
 <img src="https://img.shields.io/badge/MySQL-4479A1?logo=mysql&amp;logoColor=white" />
 <img src="https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&amp;logoColor=white" />
 <img src="https://img.shields.io/badge/Redis-DC382D?logo=redis&amp;logoColor=white" />
+<img src="https://img.shields.io/badge/DynamoDB-4053D6?logo=amazondynamodb&amp;logoColor=white" />
 </p>
 
 ---
