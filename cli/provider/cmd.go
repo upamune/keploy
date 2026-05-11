@@ -388,6 +388,7 @@ func (c *CmdConfigurator) AddUncommonFlags(cmd *cobra.Command) {
 		cmd.Flags().Bool("compare-all", false, "Compare all response body types including non-JSON (default: false, only JSON bodies are compared)")
 		cmd.Flags().Bool("schema-match", false, "Compare only the schema of the response body")
 		cmd.Flags().Bool("update-test-mapping", c.cfg.Test.UpdateTestMapping, "Update the mapping of testcases")
+		cmd.Flags().Bool("freeze-time", c.cfg.Test.FreezeTime, "Write the recorded test timestamp to KEPLOY_FREEZE_TIME and KEPLOY_FREEZE_TIME_FILE before each replay request")
 	}
 }
 
@@ -453,6 +454,7 @@ func aliasNormalizeFunc(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 		"compareAll":                "compare-all",
 		"schemaMatch":               "schema-match",
 		"updateTestMapping":         "update-test-mapping",
+		"freezeTime":                "freeze-time",
 		"capturePackets":            "capture-packets",
 		"opportunisticTlsIntercept": "opportunistic-tls-intercept",
 	}
@@ -1161,6 +1163,12 @@ func (c *CmdConfigurator) ValidateFlags(ctx context.Context, cmd *cobra.Command)
 			c.cfg.Test.DisableAutoHeaderNoise, err = cmd.Flags().GetBool("disableAutoHeaderNoise")
 			if err != nil {
 				errMsg := "failed to read the --disableAutoHeaderNoise flag; check the flag name with --help and confirm this command supports it"
+				utils.LogError(c.logger, err, errMsg)
+				return errors.New(errMsg)
+			}
+			c.cfg.Test.FreezeTime, err = cmd.Flags().GetBool("freeze-time")
+			if err != nil {
+				errMsg := "failed to read the --freeze-time flag"
 				utils.LogError(c.logger, err, errMsg)
 				return errors.New(errMsg)
 			}

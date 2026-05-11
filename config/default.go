@@ -73,6 +73,7 @@ test:
   protoInclude: []
   compareAll: false
   updateTestMapping: false
+  freezeTime: false
   disableAutoHeaderNoise: false
   # strictMockWindow enforces cross-test bleed prevention. Per-test
   # (LifetimePerTest) mocks whose request timestamp falls outside the

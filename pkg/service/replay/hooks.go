@@ -5,6 +5,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	"go.keploy.io/server/v3/config"
 	"go.keploy.io/server/v3/pkg"
@@ -44,8 +47,8 @@ func (h *Hooks) SimulateRequest(ctx context.Context, tc *models.TestCase, testSe
 	urlReplacements, portMappings := h.mergeReplaceWith(testSetID)
 
 	switch tc.Kind {
-	case models.HTTP:
-		if err := h.instrumentation.BeforeSimulate(ctx, &tc.HTTPReq.Timestamp, testSetID, tc.Name); err != nil {
+	case models.HTTP, models.HTTP2:
+		if err := h.beforeSimulate(ctx, &tc.HTTPReq.Timestamp, testSetID, tc.Name); err != nil {
 			h.logger.Error("failed to call BeforeSimulate hook", zap.Error(err))
 		}
 
@@ -75,7 +78,7 @@ func (h *Hooks) SimulateRequest(ctx context.Context, tc *models.TestCase, testSe
 			h.logger.Debug("Simulating HTTP streaming request", zap.Any("Test case", tc.Name))
 			resp, err := pkg.SimulateHTTPStreaming(ctx, tc, testSetID, h.logger, cfg)
 
-			if afterErr := h.instrumentation.AfterSimulate(ctx, tc.Name, testSetID); afterErr != nil {
+			if afterErr := h.afterSimulate(ctx, tc.Name, testSetID); afterErr != nil {
 				h.logger.Error("failed to call AfterSimulate hook", zap.Error(afterErr))
 			}
 
@@ -85,14 +88,14 @@ func (h *Hooks) SimulateRequest(ctx context.Context, tc *models.TestCase, testSe
 		h.logger.Debug("Simulating HTTP request", zap.Any("Test case", tc))
 		resp, err := pkg.SimulateHTTP(ctx, tc, testSetID, h.logger, cfg)
 
-		if err := h.instrumentation.AfterSimulate(ctx, tc.Name, testSetID); err != nil {
+		if err := h.afterSimulate(ctx, tc.Name, testSetID); err != nil {
 			h.logger.Error("failed to call AfterSimulate hook", zap.Error(err))
 		}
 
 		return resp, err
 	case models.GRPC_EXPORT:
 
-		if err := h.instrumentation.BeforeSimulate(ctx, &tc.GrpcReq.Timestamp, testSetID, tc.Name); err != nil {
+		if err := h.beforeSimulate(ctx, &tc.GrpcReq.Timestamp, testSetID, tc.Name); err != nil {
 			h.logger.Error("failed to call BeforeSimulate hook", zap.Error(err))
 		}
 
@@ -114,7 +117,7 @@ func (h *Hooks) SimulateRequest(ctx context.Context, tc *models.TestCase, testSe
 			PortMappings:    portMappings,
 		})
 
-		if err := h.instrumentation.AfterSimulate(ctx, tc.Name, testSetID); err != nil {
+		if err := h.afterSimulate(ctx, tc.Name, testSetID); err != nil {
 			h.logger.Error("failed to call AfterSimulate hook", zap.Error(err))
 		}
 
@@ -124,6 +127,43 @@ func (h *Hooks) SimulateRequest(ctx context.Context, tc *models.TestCase, testSe
 		return nil, fmt.Errorf("unsupported test case kind: %s", tc.Kind)
 	}
 
+}
+
+func (h *Hooks) beforeSimulate(ctx context.Context, ts *time.Time, testSetID, tcName string) error {
+	if h.cfg != nil && h.cfg.Test.FreezeTime && ts != nil && !ts.IsZero() {
+		if err := h.writeFreezeTime(*ts); err != nil {
+			return err
+		}
+	}
+	return h.instrumentation.BeforeSimulate(ctx, ts, testSetID, tcName)
+}
+
+func (h *Hooks) afterSimulate(ctx context.Context, tcName, testSetID string) error {
+	return h.instrumentation.AfterSimulate(ctx, tcName, testSetID)
+}
+
+func (h *Hooks) writeFreezeTime(ts time.Time) error {
+	if err := os.Setenv("KEPLOY_FREEZE_TIME", ts.Format(time.RFC3339Nano)); err != nil {
+		return fmt.Errorf("set KEPLOY_FREEZE_TIME: %w", err)
+	}
+	path := os.Getenv("KEPLOY_FREEZE_TIME_FILE")
+	if path == "" {
+		base := "."
+		if h.cfg != nil && h.cfg.Path != "" {
+			base = h.cfg.Path
+		}
+		path = filepath.Join(base, ".keploy-freeze-time")
+		if err := os.Setenv("KEPLOY_FREEZE_TIME_FILE", path); err != nil {
+			return fmt.Errorf("set KEPLOY_FREEZE_TIME_FILE: %w", err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create freeze-time directory: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(ts.Format(time.RFC3339Nano)+"\n"), 0o644); err != nil {
+		return fmt.Errorf("write freeze-time file: %w", err)
+	}
+	return nil
 }
 
 func effectiveHTTPConfigPort(tc *models.TestCase, cfg config.Test) uint32 {

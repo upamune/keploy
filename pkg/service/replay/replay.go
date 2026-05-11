@@ -712,6 +712,11 @@ func (r *Replayer) Instrument(ctx context.Context) (*InstrumentState, error) {
 		r.logger.Info("Keploy will not mock the outgoing calls when base path is provided", zap.Any("base path", r.config.Test.BasePath))
 		return &InstrumentState{}, nil
 	}
+	if r.config.Test.FreezeTime {
+		if err := os.Setenv("KEPLOY_FREEZE_TIME_FILE", filepath.Join(r.config.Path, ".keploy-freeze-time")); err != nil {
+			return &InstrumentState{}, fmt.Errorf("failed to configure freeze-time file: %w", err)
+		}
+	}
 	passPortsUint := config.GetByPassPorts(r.config)
 	passPortsUint32 := make([]uint32, len(passPortsUint)) // slice type of uint32
 	for i, port := range passPortsUint {
