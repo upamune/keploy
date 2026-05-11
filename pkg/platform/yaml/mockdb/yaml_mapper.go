@@ -27,6 +27,7 @@ var builtinYAMLKinds = map[models.Kind]struct{}{
 	models.HTTP:        {},
 	models.HTTP2:       {},
 	models.GENERIC:     {},
+	models.REDIS:       {},
 	models.MySQL:       {},
 	models.Postgres:    {},
 	models.PostgresV2:  {},

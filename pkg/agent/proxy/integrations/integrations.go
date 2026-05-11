@@ -20,6 +20,7 @@ const (
 	HTTP2       IntegrationType = "http2"
 	GRPC        IntegrationType = "grpc"
 	GENERIC     IntegrationType = "generic"
+	REDIS       IntegrationType = "redis"
 	MYSQL       IntegrationType = "mysql"
 	POSTGRES_V1 IntegrationType = "postgres_v1"
 	POSTGRES_V2 IntegrationType = "postgres_v2"

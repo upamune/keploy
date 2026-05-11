@@ -116,7 +116,7 @@ func EncodeMock(mock *models.Mock, logger *zap.Logger) (*yaml.NetworkTrafficDoc,
 			utils.LogError(logger, err, "failed to marshal the dns input-output as yaml")
 			return nil, err
 		}
-	case models.GENERIC:
+	case models.GENERIC, models.REDIS:
 		genericSpec := models.GenericSchema{
 			Metadata: mock.Spec.Metadata,
 
@@ -483,7 +483,7 @@ func DecodeMocks(yamlMocks []*yaml.NetworkTrafficDoc, logger *zap.Logger) ([]*mo
 				ReqTimestampMock: grpcSpec.ReqTimestampMock,
 				ResTimestampMock: grpcSpec.ResTimestampMock,
 			}
-		case models.GENERIC:
+		case models.GENERIC, models.REDIS:
 			genericSpec := models.GenericSchema{}
 			err := m.Spec.Decode(&genericSpec)
 			if err != nil {
