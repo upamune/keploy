@@ -12,6 +12,10 @@ const (
 	HeaderContains  AssertionType = "header_contains"
 	HeaderExists    AssertionType = "header_exists"
 	HeaderMatches   AssertionType = "header_matches"
+	BodyContains    AssertionType = "body_contains"
+	BodyMatches     AssertionType = "body_matches"
 	JsonEqual       AssertionType = "json_equal"
 	JsonContains    AssertionType = "json_contains"
+	JsonPathEqual   AssertionType = "json_path_equal"
+	JsonPathExists  AssertionType = "json_path_exists"
 )

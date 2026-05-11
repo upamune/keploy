@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 
 	"github.com/k0kubun/pp/v3"
@@ -512,7 +513,7 @@ func AssertionMatch(tc *models.TestCase, actualResponse *models.HTTPResp, logger
 			} else {
 				classStr = class
 			}
-			actualClass := fmtSprintf234("%dxx", 200/100)
+			actualClass := fmtSprintf234("%dxx", actualResponse.StatusCode/100)
 			if classStr != actualClass {
 				pass = false
 				logger.Error("status_code_class assertion failed", zap.String("expected", class), zap.String("actual", actualClass))
@@ -629,6 +630,20 @@ func AssertionMatch(tc *models.TestCase, actualResponse *models.HTTPResp, logger
 				}
 			}
 
+		case models.BodyContains:
+			expected := toString(value)
+			if !strings.Contains(actualResponse.Body, expected) {
+				pass = false
+				logger.Error("body_contains assertion failed", zap.String("expected_substr", expected))
+			}
+
+		case models.BodyMatches:
+			pattern := toString(value)
+			if matched, err := regexp.MatchString(pattern, actualResponse.Body); err != nil || !matched {
+				pass = false
+				logger.Error("body_matches assertion failed", zap.String("pattern", pattern), zap.Error(err))
+			}
+
 		case models.JsonEqual:
 			expJSON := tc.HTTPResp.Body
 			actJSON := actualResponse.Body
@@ -652,6 +667,27 @@ func AssertionMatch(tc *models.TestCase, actualResponse *models.HTTPResp, logger
 			if ok, _ := matcherUtils.JsonContains(actualResponse.Body, expectedMap); !ok {
 				pass = false
 				logger.Error("json_contains assertion failed", zap.Any("expected", expectedMap))
+			}
+
+		case models.JsonPathEqual:
+			expected := toStringMap(value)
+			for path, want := range expected {
+				got := gjson.Get(actualResponse.Body, path)
+				if !got.Exists() || got.String() != want {
+					pass = false
+					logger.Error("json_path_equal assertion failed",
+						zap.String("path", path),
+						zap.String("expected", want),
+						zap.String("actual", got.String()))
+				}
+			}
+
+		case models.JsonPathExists:
+			for _, path := range toStringSlice(value) {
+				if !gjson.Get(actualResponse.Body, path).Exists() {
+					pass = false
+					logger.Error("json_path_exists assertion failed", zap.String("path", path))
+				}
 			}
 
 		default:
