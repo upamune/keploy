@@ -260,6 +260,12 @@ func emitCompleteStreams(logger *zap.Logger, ctx context.Context, sm *pkg.Defaul
 		if path, ok := stream.GRPCReq.Headers.PseudoHeaders[":path"]; ok {
 			method = path
 		}
+		if pkg.IsConnectRPCStream(stream) {
+			logger.Debug("captured Connect RPC test case (passthrough)", zap.String("method", method))
+			Utils.CaptureHTTP2(ctx, logger, t, stream, appPort)
+			sm.CleanupStream(stream.ID)
+			continue
+		}
 		logger.Debug("captured gRPC test case (passthrough)", zap.String("method", method))
 		Utils.CaptureGRPC(ctx, logger, t, stream, appPort)
 		sm.CleanupStream(stream.ID)

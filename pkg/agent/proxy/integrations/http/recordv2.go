@@ -459,6 +459,7 @@ func (h *HTTP) buildHTTPMock(m *FinalHTTP, destPort uint, connID string, opts mo
 		"operation": req.Method,
 		"connID":    connID,
 	}
+	annotateHTTPDependency(meta, req)
 
 	if utils.IsPassThrough(h.Logger, req, destPort, opts) {
 		h.Logger.Debug("V2: request is a passThrough, skipping mock emit",

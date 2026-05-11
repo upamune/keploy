@@ -33,7 +33,7 @@ func EncodeTestcase(tc models.TestCase, logger *zap.Logger) (*yaml.NetworkTraffi
 
 	var noise map[string][]string
 	switch tc.Kind {
-	case models.HTTP:
+	case models.HTTP, models.HTTP2:
 		logger.Debug("Encoding HTTP test case")
 		doc.Curl = tc.Curl
 
@@ -305,7 +305,7 @@ func Decode(yamlTestcase *yaml.NetworkTrafficDoc, logger *zap.Logger) (*models.T
 	}
 
 	switch tc.Kind {
-	case models.HTTP:
+	case models.HTTP, models.HTTP2:
 
 		var httpSpec models.HTTPSchema
 		if err := yamlTestcase.Spec.Decode(&httpSpec); err != nil {

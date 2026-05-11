@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -141,9 +142,11 @@ type HTTP2StreamState struct {
 
 // HTTP2Stream represents a complete HTTP/2 stream
 type HTTP2Stream struct {
-	ID       uint32
-	GRPCReq  *models.GrpcReq
-	GRPCResp *models.GrpcResp
+	ID        uint32
+	GRPCReq   *models.GrpcReq
+	GRPCResp  *models.GrpcResp
+	HTTP2Req  *models.HTTP2Req
+	HTTP2Resp *models.HTTP2Resp
 }
 
 // DefaultStreamManager implements stream management
@@ -411,9 +414,11 @@ func (sm *DefaultStreamManager) GetCompleteStreams() []*HTTP2Stream {
 			stream.grpcReq.Timestamp = stream.startTime
 			stream.grpcResp.Timestamp = stream.endTime
 			http2Stream := &HTTP2Stream{
-				ID:       id,
-				GRPCReq:  stream.grpcReq,
-				GRPCResp: stream.grpcResp,
+				ID:        id,
+				GRPCReq:   stream.grpcReq,
+				GRPCResp:  stream.grpcResp,
+				HTTP2Req:  stream.toHTTP2Req(),
+				HTTP2Resp: stream.toHTTP2Resp(),
 			}
 			completed = append(completed, http2Stream)
 		}
@@ -427,6 +432,56 @@ func (sm *DefaultStreamManager) CleanupStream(streamID uint32) {
 	sm.mutex.Lock()
 	defer sm.mutex.Unlock()
 	delete(sm.streams, streamID)
+}
+
+func (s *HTTP2StreamState) isConnectRPC() bool {
+	if s == nil || s.grpcReq == nil {
+		return false
+	}
+	ct := strings.ToLower(s.grpcReq.Headers.OrdinaryHeaders["content-type"])
+	return strings.HasPrefix(ct, "application/connect+") || strings.HasPrefix(ct, "application/connect-")
+}
+
+func (s *HTTP2StreamState) toHTTP2Req() *models.HTTP2Req {
+	if s == nil || s.grpcReq == nil {
+		return nil
+	}
+	h := s.grpcReq.Headers
+	req := &models.HTTP2Req{
+		Method:    models.Method(h.PseudoHeaders[":method"]),
+		URL:       h.PseudoHeaders[":path"],
+		Authority: h.PseudoHeaders[":authority"],
+		Scheme:    h.PseudoHeaders[":scheme"],
+		Headers:   cloneStringMap(h.OrdinaryHeaders),
+		Body:      s.grpcReq.Body.DecodedData,
+		Timestamp: s.startTime,
+	}
+	return req
+}
+
+func (s *HTTP2StreamState) toHTTP2Resp() *models.HTTP2Resp {
+	if s == nil || s.grpcResp == nil {
+		return nil
+	}
+	status, _ := strconv.Atoi(s.grpcResp.Headers.PseudoHeaders[":status"])
+	return &models.HTTP2Resp{
+		StatusCode: status,
+		Headers:    cloneStringMap(s.grpcResp.Headers.OrdinaryHeaders),
+		Body:       s.grpcResp.Body.DecodedData,
+		Trailers:   cloneStringMap(s.grpcResp.Trailers.OrdinaryHeaders),
+		Timestamp:  s.endTime,
+	}
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 // processCompleteMessage assembles DATA frames for the given side and parses gRPC payload
@@ -466,8 +521,10 @@ func (sm *DefaultStreamManager) checkStreamCompletion(streamID uint32) {
 		// Request considered "done" once END_STREAM seen on request side and headers received.
 		reqDone := s.reqHeadersReceived && s.reqEndStreamReceived
 
-		// Response considered "done" once headers + trailers received and END_STREAM on response.
-		respDone := s.respHeadersReceived && s.respTrailersReceived && s.respEndStreamReceived
+		// gRPC uses response trailers for status; Connect RPC over HTTP/2 is
+		// complete when the response stream ends and may not carry trailers.
+		respDone := s.respHeadersReceived && s.respEndStreamReceived &&
+			(s.respTrailersReceived || s.isConnectRPC())
 
 		if reqDone && respDone {
 			sm.logger.Debug("Stream completed", zap.Any("stream", s))
@@ -513,6 +570,15 @@ func IsGRPCGatewayRequest(stream *HTTP2Stream) bool {
 	}
 
 	return false
+}
+
+// IsConnectRPCStream reports whether an HTTP/2 stream carries Connect RPC.
+func IsConnectRPCStream(stream *HTTP2Stream) bool {
+	if stream == nil || stream.GRPCReq == nil {
+		return false
+	}
+	ct := strings.ToLower(stream.GRPCReq.Headers.OrdinaryHeaders["content-type"])
+	return strings.HasPrefix(ct, "application/connect+") || strings.HasPrefix(ct, "application/connect-")
 }
 
 // SimulateGRPC simulates a gRPC call and returns the response

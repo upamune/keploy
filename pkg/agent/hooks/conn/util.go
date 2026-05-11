@@ -438,3 +438,30 @@ func CaptureGRPC(ctx context.Context, logger *zap.Logger, t chan *models.TestCas
 			zap.String("path", http2Stream.GRPCReq.Headers.PseudoHeaders[":path"]))
 	}
 }
+
+// CaptureHTTP2 captures a non-gRPC HTTP/2 request/response pair such as Connect RPC.
+func CaptureHTTP2(ctx context.Context, logger *zap.Logger, t chan *models.TestCase, http2Stream *pkg.HTTP2Stream, appPort uint16) {
+	if memoryguard.IsRecordingPaused() {
+		return
+	}
+	if http2Stream == nil || http2Stream.HTTP2Req == nil || http2Stream.HTTP2Resp == nil {
+		logger.Error("HTTP/2 request or response is nil")
+		return
+	}
+	testCase := &models.TestCase{
+		Version:  models.GetVersion(),
+		Name:     http2Stream.HTTP2Req.URL,
+		Kind:     models.HTTP2,
+		Created:  time.Now().Unix(),
+		HTTPReq:  models.HTTPReq{Method: http2Stream.HTTP2Req.Method, URL: http2Stream.HTTP2Req.URL, Header: http2Stream.HTTP2Req.Headers, Body: http2Stream.HTTP2Req.Body, Timestamp: http2Stream.HTTP2Req.Timestamp},
+		HTTPResp: models.HTTPResp{StatusCode: http2Stream.HTTP2Resp.StatusCode, Header: http2Stream.HTTP2Resp.Headers, Body: http2Stream.HTTP2Resp.Body, Timestamp: http2Stream.HTTP2Resp.Timestamp},
+		Noise:    map[string][]string{},
+		AppPort:  appPort,
+	}
+	select {
+	case <-ctx.Done():
+		return
+	case t <- testCase:
+		logger.Debug("Captured HTTP/2 test case", zap.String("path", http2Stream.HTTP2Req.URL))
+	}
+}

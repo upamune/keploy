@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.keploy.io/server/v3/pkg"
@@ -250,6 +251,7 @@ func (h *HTTP) parseFinalHTTP(ctx context.Context, mock *FinalHTTP, destPort uin
 		"operation": req.Method,
 		"connID":    ctx.Value(models.ClientConnectionIDKey).(string),
 	}
+	annotateHTTPDependency(meta, req)
 
 	// Check if the request is a passThrough request
 	if utils.IsPassThrough(h.Logger, req, destPort, opts) {
@@ -318,4 +320,21 @@ func (h *HTTP) parseFinalHTTP(ctx context.Context, mock *FinalHTTP, destPort uin
 	case mocks <- newMock:
 	}
 	return nil
+}
+
+func annotateHTTPDependency(meta map[string]string, req *http.Request) {
+	if meta == nil || req == nil {
+		return
+	}
+	contentType := strings.ToLower(req.Header.Get("Content-Type"))
+	if strings.HasPrefix(contentType, "application/connect+") || strings.HasPrefix(contentType, "application/connect-") {
+		meta["rpc"] = "connect"
+		meta["name"] = "ConnectRPC"
+	}
+	if strings.Contains(strings.ToLower(req.Header.Get("X-Amz-Target")), "dynamodb") ||
+		strings.Contains(strings.ToLower(req.Host), "dynamodb.") ||
+		strings.Contains(strings.ToLower(req.URL.Host), "dynamodb.") {
+		meta["dependency"] = "dynamodb"
+		meta["name"] = "DynamoDB"
+	}
 }
