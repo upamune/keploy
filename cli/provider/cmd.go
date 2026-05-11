@@ -204,6 +204,22 @@ func (c *CmdConfigurator) AddFlags(cmd *cobra.Command) error {
 	case "templatize":
 		cmd.Flags().StringP("path", "p", ".", "Path to local directory where generated testcases/mocks are stored")
 		cmd.Flags().StringSliceP("testsets", "t", c.cfg.Templatize.TestSets, "Testsets to run e.g. --testsets \"test-set-1, test-set-2\"")
+	case "load":
+		cmd.Flags().StringP("path", "p", ".", "Path to local directory where generated testcases are stored")
+		cmd.Flags().StringSliceP("test-sets", "t", c.cfg.Load.TestSets, "Testsets to run as load traffic")
+		cmd.Flags().Uint32("vus", c.cfg.Load.VUs, "Number of virtual users to run concurrently")
+		cmd.Flags().Duration("duration", c.cfg.Load.Duration, "How long to run the load test")
+		cmd.Flags().String("host", c.cfg.Test.Host, "Custom host to replace the actual host in the testcases")
+		cmd.Flags().Uint32("port", c.cfg.Test.Port, "Custom HTTP port to replace the actual port in the testcases")
+		cmd.Flags().Uint64("api-timeout", c.cfg.Test.APITimeout, "Request timeout for each load-test call")
+	case "push", "pull":
+		cmd.Flags().StringP("path", "p", ".", "Path to local directory where generated testcases/mocks are stored")
+		cmd.Flags().String("registry-path", c.cfg.Registry.Path, "Path to the local mock registry")
+		cmd.Flags().String("name", c.cfg.Registry.Name, "Registry entry name")
+		cmd.Flags().String("test-set", c.cfg.Registry.TestSet, "Test-set to push from or pull into")
+	case "list":
+		cmd.Flags().StringP("path", "p", ".", "Path to local directory where generated testcases/mocks are stored")
+		cmd.Flags().String("registry-path", c.cfg.Registry.Path, "Path to the local mock registry")
 	case "record", "test":
 		if cmd.Parent() != nil && cmd.Parent().Name() == "contract" {
 			cmd.Flags().StringSliceP("services", "s", c.cfg.Contract.Services, "Specify the services for which to generate contracts")
@@ -727,6 +743,78 @@ func (c *CmdConfigurator) ValidateFlags(ctx context.Context, cmd *cobra.Command)
 
 	switch cmd.Name() {
 
+	case "push", "pull", "list":
+		path, err := cmd.Flags().GetString("path")
+		if err != nil {
+			return errors.New("failed to get the path")
+		}
+		absPath, err := utils.GetAbsPath(path)
+		if err != nil {
+			utils.LogError(c.logger, err, "error while getting absolute path")
+			return errors.New("failed to get the absolute path")
+		}
+		c.cfg.Path = absPath + "/keploy"
+		c.cfg.Registry.Path, err = cmd.Flags().GetString("registry-path")
+		if err != nil {
+			return errors.New("failed to get the registry-path flag")
+		}
+		if c.cfg.Registry.Path != "" {
+			c.cfg.Registry.Path = utils.ToAbsPath(c.logger, c.cfg.Registry.Path)
+		}
+		if cmd.Name() != "list" {
+			c.cfg.Registry.Name, err = cmd.Flags().GetString("name")
+			if err != nil {
+				return errors.New("failed to get the name flag")
+			}
+			c.cfg.Registry.TestSet, err = cmd.Flags().GetString("test-set")
+			if err != nil {
+				return errors.New("failed to get the test-set flag")
+			}
+			if c.cfg.Registry.Name == "" || c.cfg.Registry.TestSet == "" {
+				return errors.New("--name and --test-set are required")
+			}
+		}
+	case "load":
+		path, err := cmd.Flags().GetString("path")
+		if err != nil {
+			return errors.New("failed to get the path")
+		}
+		absPath, err := utils.GetAbsPath(path)
+		if err != nil {
+			utils.LogError(c.logger, err, "error while getting absolute path")
+			return errors.New("failed to get the absolute path")
+		}
+		c.cfg.Path = absPath + "/keploy"
+		c.cfg.Load.TestSets, err = cmd.Flags().GetStringSlice("test-sets")
+		if err != nil {
+			return errors.New("failed to get the test-sets flag")
+		}
+		c.cfg.Load.VUs, err = cmd.Flags().GetUint32("vus")
+		if err != nil {
+			return errors.New("failed to get the vus flag")
+		}
+		c.cfg.Load.Duration, err = cmd.Flags().GetDuration("duration")
+		if err != nil {
+			return errors.New("failed to get the duration flag")
+		}
+		c.cfg.Test.Host, err = cmd.Flags().GetString("host")
+		if err != nil {
+			return errors.New("failed to get the host flag")
+		}
+		c.cfg.Test.Port, err = cmd.Flags().GetUint32("port")
+		if err != nil {
+			return errors.New("failed to get the port flag")
+		}
+		c.cfg.Test.APITimeout, err = cmd.Flags().GetUint64("api-timeout")
+		if err != nil {
+			return errors.New("failed to get the api-timeout flag")
+		}
+		if c.cfg.Load.VUs == 0 {
+			return errors.New("vus must be greater than 0")
+		}
+		if c.cfg.Load.Duration <= 0 {
+			return errors.New("duration must be greater than 0")
+		}
 	case "report":
 		path, err := cmd.Flags().GetString("path")
 		if err != nil {

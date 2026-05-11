@@ -18,6 +18,14 @@ appName: ""
 command: ""
 templatize:
   testSets: []
+load:
+  testSets: []
+  vus: 1
+  duration: 30s
+registry:
+  path: ""
+  name: ""
+  testSet: ""
 port: 0
 proxyPort: 16789
 incomingProxyPort: %d

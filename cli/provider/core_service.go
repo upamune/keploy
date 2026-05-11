@@ -21,7 +21,9 @@ import (
 	testdb "go.keploy.io/server/v3/pkg/platform/yaml/testdb"
 	"go.keploy.io/server/v3/pkg/service/contract"
 	"go.keploy.io/server/v3/pkg/service/diff"
+	"go.keploy.io/server/v3/pkg/service/load"
 	"go.keploy.io/server/v3/pkg/service/record"
+	"go.keploy.io/server/v3/pkg/service/registry"
 	"go.keploy.io/server/v3/pkg/service/replay"
 	"go.keploy.io/server/v3/pkg/service/report"
 	"go.keploy.io/server/v3/pkg/service/tools"
@@ -45,6 +47,8 @@ func Get(ctx context.Context, cmd string, cfg *config.Config, logger *zap.Logger
 	toolsSvc := tools.NewTools(logger, commonServices.YamlTestSetDB, commonServices.YamlTestDB, commonServices.YamlReportDb, tel, cfg)
 	reportSvc := report.New(logger, cfg, commonServices.YamlReportDb, commonServices.YamlTestDB)
 	diffSvc := diff.New(logger, commonServices.YamlReportDb, commonServices.YamlTestDB)
+	loadSvc := load.New(logger, commonServices.YamlTestDB, cfg)
+	registrySvc := registry.New(cfg)
 	switch cmd {
 	case "record":
 		return recordSvc, nil
@@ -58,6 +62,10 @@ func Get(ctx context.Context, cmd string, cfg *config.Config, logger *zap.Logger
 		return reportSvc, nil
 	case "diff":
 		return diffSvc, nil
+	case "load":
+		return loadSvc, nil
+	case "registry":
+		return registrySvc, nil
 	default:
 		return nil, errors.New("invalid command")
 	}

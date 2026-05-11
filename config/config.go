@@ -15,6 +15,8 @@ type Config struct {
 	AppID                 uint64              `json:"appId" yaml:"appId" mapstructure:"appId"` // deprecated field
 	Command               string              `json:"command" yaml:"command" mapstructure:"command"`
 	Templatize            Templatize          `json:"templatize" yaml:"templatize" mapstructure:"templatize"`
+	Load                  Load                `json:"load" yaml:"load" mapstructure:"load"`
+	Registry              Registry            `json:"registry" yaml:"registry" mapstructure:"registry"`
 	Port                  uint32              `json:"port" yaml:"port" mapstructure:"port"`
 	E2E                   bool                `json:"e2e" yaml:"e2e" mapstructure:"e2e"`
 	DNSPort               uint32              `json:"dnsPort" yaml:"dnsPort" mapstructure:"dnsPort"`
@@ -61,6 +63,18 @@ type Agent struct {
 
 type Templatize struct {
 	TestSets []string `json:"testSets" yaml:"testSets" mapstructure:"testSets"`
+}
+
+type Load struct {
+	TestSets []string      `json:"testSets" yaml:"testSets" mapstructure:"testSets"`
+	VUs      uint32        `json:"vus" yaml:"vus" mapstructure:"vus"`
+	Duration time.Duration `json:"duration" yaml:"duration" mapstructure:"duration"`
+}
+
+type Registry struct {
+	Path    string `json:"path" yaml:"path" mapstructure:"path"`
+	Name    string `json:"name" yaml:"name" mapstructure:"name"`
+	TestSet string `json:"testSet" yaml:"testSet" mapstructure:"testSet"`
 }
 
 type Record struct {
