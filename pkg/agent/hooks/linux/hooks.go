@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
@@ -63,21 +64,30 @@ type Hooks struct {
 
 	// eBPF C shared objectsobjects
 	// ebpf objects and events
-	socket      link.Link
-	connect4    link.Link
-	udp4Sendmsg link.Link
-	udp4Recvmsg link.Link
-	gp4         link.Link
-	connect6    link.Link
-	udp6Sendmsg link.Link
-	udp6Recvmsg link.Link
-	gp6         link.Link
-	objects     bpfObjects
-	cgBind4     link.Link
-	cgBind6     link.Link
+	socket          link.Link
+	connect4        link.Link
+	udp4Sendmsg     link.Link
+	udp4Recvmsg     link.Link
+	gp4             link.Link
+	connect6        link.Link
+	udp6Sendmsg     link.Link
+	udp6Recvmsg     link.Link
+	gp6             link.Link
+	objects         bpfObjects
+	cgBind4         link.Link
+	cgBind6         link.Link
+	freezeLinks     []link.Link
+	freezeMaps      []*ebpf.Map
+	freezePrograms  []*ebpf.Program
+	freezeConfigMap *ebpf.Map
 
 	BindEvents *ebpf.Map
 	sockops    link.Link
+
+	freezeMu      sync.RWMutex
+	freezeEnabled bool
+	freezeAnchor  time.Time
+	freezeTime    time.Time
 }
 
 func (h *Hooks) Load(ctx context.Context, opts agent.HookCfg, setupOpts config.Agent) error {
@@ -411,6 +421,11 @@ func (h *Hooks) load(ctx context.Context, opts agent.HookCfg, setupOpts config.A
 		h.logger.Error("failed to send agent info to the ebpf program", zap.Error(err))
 		return err
 	}
+	if h.conf != nil && h.conf.Test.FreezeTime && opts.Mode == models.MODE_TEST {
+		if err := h.attachFreezeTimePrograms(); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -474,6 +489,31 @@ func (h *Hooks) unLoad(_ context.Context, opts agent.HookCfg) {
 	if h.sockops != nil {
 		h.sockops.Close()
 	}
+	for _, l := range h.freezeLinks {
+		if l != nil {
+			if err := l.Close(); err != nil {
+				utils.LogError(h.logger, err, "failed to close freeze-time hook")
+			}
+		}
+	}
+	h.freezeLinks = nil
+	for _, p := range h.freezePrograms {
+		if p != nil {
+			if err := p.Close(); err != nil {
+				utils.LogError(h.logger, err, "failed to close freeze-time program")
+			}
+		}
+	}
+	h.freezePrograms = nil
+	for _, m := range h.freezeMaps {
+		if m != nil {
+			if err := m.Close(); err != nil {
+				utils.LogError(h.logger, err, "failed to close freeze-time map")
+			}
+		}
+	}
+	h.freezeMaps = nil
+	h.freezeConfigMap = nil
 
 	// Close eBPF objects with proper synchronization
 	h.objectsMutex.Lock()

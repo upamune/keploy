@@ -1,15 +1,21 @@
 package routes
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	coreAgent "go.keploy.io/server/v3/pkg/agent"
 	pTls "go.keploy.io/server/v3/pkg/agent/proxy/tls"
+	"go.keploy.io/server/v3/pkg/models"
+	serviceAgent "go.keploy.io/server/v3/pkg/service/agent"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -148,3 +154,82 @@ func TestMakeAgentReady_NoReadinessFileOn503(t *testing.T) {
 		t.Fatalf("after CA ready: expected agent.ready on disk: %v", err)
 	}
 }
+
+type freezeRouteSvc struct {
+	set   time.Time
+	clear int
+}
+
+func (f *freezeRouteSvc) Setup(context.Context, chan int) error { return nil }
+func (f *freezeRouteSvc) StartIncomingProxy(context.Context, models.IncomingOptions) (chan *models.TestCase, error) {
+	return nil, nil
+}
+func (f *freezeRouteSvc) GetOutgoing(context.Context, models.OutgoingOptions) (<-chan *models.Mock, error) {
+	return nil, nil
+}
+func (f *freezeRouteSvc) GetMapping(context.Context) (<-chan models.TestMockMapping, error) {
+	return nil, nil
+}
+func (f *freezeRouteSvc) MockOutgoing(context.Context, models.OutgoingOptions) error { return nil }
+func (f *freezeRouteSvc) SetMocks(context.Context, []*models.Mock, []*models.Mock) error {
+	return nil
+}
+func (f *freezeRouteSvc) GetConsumedMocks(context.Context) ([]models.MockState, error) {
+	return nil, nil
+}
+func (f *freezeRouteSvc) GetMockErrors(context.Context) ([]models.UnmatchedCall, error) {
+	return nil, nil
+}
+func (f *freezeRouteSvc) StoreMocks(context.Context, []*models.Mock, []*models.Mock) error {
+	return nil
+}
+func (f *freezeRouteSvc) UpdateMockParams(context.Context, models.MockFilterParams) error {
+	return nil
+}
+func (f *freezeRouteSvc) SetGracefulShutdown(context.Context) error { return nil }
+func (f *freezeRouteSvc) SubscribePcap(io.Writer, func()) (func(), error) {
+	return nil, nil
+}
+func (f *freezeRouteSvc) StreamPcap(context.Context, io.Writer, func()) error { return nil }
+func (f *freezeRouteSvc) StreamKeylog(context.Context, io.Writer) error       { return nil }
+func (f *freezeRouteSvc) SetFreezeAnchor(context.Context, time.Time) error    { return nil }
+func (f *freezeRouteSvc) SetFreezeTime(_ context.Context, ts time.Time) error {
+	f.set = ts
+	return nil
+}
+func (f *freezeRouteSvc) ClearFreezeTime(context.Context) error {
+	f.clear++
+	return nil
+}
+
+func TestHooksUpdateAndClearFreezeTime(t *testing.T) {
+	orig := serviceAgent.ActiveHooks
+	serviceAgent.RegisterHooks(&serviceAgent.AgentHook{})
+	t.Cleanup(func() { serviceAgent.RegisterHooks(orig) })
+
+	svc := &freezeRouteSvc{}
+	a := &Agent{logger: zaptest.NewLogger(t), svc: svc}
+	ts := time.Date(2024, 3, 2, 1, 2, 3, 4, time.UTC)
+
+	before := httptest.NewRecorder()
+	a.HandleBeforeSimulate(before, httptest.NewRequest(http.MethodPost, "/hooks/before-simulate", strings.NewReader(`{"timestamp":"`+ts.Format(time.RFC3339Nano)+`","testSetID":"test-set-0","testCaseName":"test-1"}`)))
+	if before.Code != http.StatusOK {
+		t.Fatalf("before status = %d, body=%q", before.Code, before.Body.String())
+	}
+	if !svc.set.Equal(ts) {
+		t.Fatalf("freeze timestamp = %v, want %v", svc.set, ts)
+	}
+
+	after := httptest.NewRecorder()
+	a.HandleAfterSimulate(after, httptest.NewRequest(http.MethodPost, "/hooks/after-simulate", strings.NewReader(`{"testSetID":"test-set-0","testCaseName":"test-1"}`)))
+	if after.Code != http.StatusOK {
+		t.Fatalf("after status = %d, body=%q", after.Code, after.Body.String())
+	}
+	if svc.clear != 1 {
+		t.Fatalf("clear calls = %d, want 1", svc.clear)
+	}
+}
+
+var _ serviceAgent.Service = (*freezeRouteSvc)(nil)
+var _ serviceAgent.FreezeTimeService = (*freezeRouteSvc)(nil)
+var _ coreAgent.FreezeTimeController = (*freezeRouteSvc)(nil)

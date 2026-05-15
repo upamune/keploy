@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"io"
+	"time"
 
 	"go.keploy.io/server/v3/pkg/models"
 )
@@ -39,4 +40,12 @@ type Service interface {
 	// asynchronously as TLS handshakes happen on the proxy.
 	StreamKeylog(ctx context.Context, w io.Writer) error
 	// SendKtInfo(ctx context.Context, tb models.TestBenchReq) error
+}
+
+// FreezeTimeService is implemented by agent services that can update a
+// Linux-native clock freezer before replay simulates each recorded request.
+type FreezeTimeService interface {
+	SetFreezeAnchor(ctx context.Context, anchor time.Time) error
+	SetFreezeTime(ctx context.Context, timestamp time.Time) error
+	ClearFreezeTime(ctx context.Context) error
 }

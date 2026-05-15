@@ -903,6 +903,9 @@ func (a *AgentClient) startNativeAgent(ctx context.Context, opts models.SetupOpt
 	if opts.OpportunisticTLSIntercept {
 		args = append(args, "--opportunistic-tls-intercept")
 	}
+	if a.conf.Test.FreezeTime {
+		args = append(args, "--freeze-time")
+	}
 	if opts.BuildDelay > 0 {
 		args = append(args, "--build-delay", strconv.FormatUint(opts.BuildDelay, 10))
 	}

@@ -387,6 +387,35 @@ func (a *Agent) GetMockErrors(ctx context.Context) ([]models.UnmatchedCall, erro
 	return a.Proxy.GetMockErrors(ctx)
 }
 
+// SetFreezeAnchor seeds the wall-clock freezer with the earliest recorded
+// mock timestamp before the user application starts.
+func (a *Agent) SetFreezeAnchor(ctx context.Context, anchor time.Time) error {
+	freezer, ok := a.Hooks.(coreAgent.FreezeTimeController)
+	if !ok || anchor.IsZero() {
+		return nil
+	}
+	return freezer.SetFreezeAnchor(ctx, anchor)
+}
+
+// SetFreezeTime updates the wall-clock freezer for the testcase about to be
+// replayed.
+func (a *Agent) SetFreezeTime(ctx context.Context, timestamp time.Time) error {
+	freezer, ok := a.Hooks.(coreAgent.FreezeTimeController)
+	if !ok || timestamp.IsZero() {
+		return nil
+	}
+	return freezer.SetFreezeTime(ctx, timestamp)
+}
+
+// ClearFreezeTime disables wall-clock rewriting after a simulated testcase.
+func (a *Agent) ClearFreezeTime(ctx context.Context) error {
+	freezer, ok := a.Hooks.(coreAgent.FreezeTimeController)
+	if !ok {
+		return nil
+	}
+	return freezer.ClearFreezeTime(ctx)
+}
+
 // StoreMocks stores the filtered and unfiltered mocks for a client ID.
 //
 // Unification (Phase 1): every mock is run through DeriveLifetime on
@@ -454,6 +483,10 @@ func (a *Agent) StoreMocks(ctx context.Context, filtered []*models.Mock, unfilte
 	// gap that lets boto3 / JWT libs see "now > recorded Expiration" and
 	// kill the worker.
 	if anchor := earliestReqTimestamp(storage.filtered, storage.unfiltered); !anchor.IsZero() {
+		if err := a.SetFreezeAnchor(ctx, anchor); err != nil {
+			a.logger.Warn("freeze-time anchor update returned error",
+				zap.Error(err), zap.Time("anchor", anchor))
+		}
 		if err := ActiveHooks.SetFreezeAnchor(ctx, anchor); err != nil {
 			a.logger.Warn("SetFreezeAnchor hook returned error",
 				zap.Error(err), zap.Time("anchor", anchor))

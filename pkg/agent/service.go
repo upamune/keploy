@@ -18,6 +18,18 @@ type Hooks interface {
 	WatchBindEvents(ctx context.Context) (<-chan models.IngressEvent, error)
 }
 
+// FreezeTimeController is an optional Linux-native hook extension used by
+// replay to pin the user application's wall clock to recorded testcase time.
+//
+// Implementations must only affect wall-clock APIs (CLOCK_REALTIME family).
+// Monotonic clocks must remain untouched so timeouts, sleeps, retry backoff,
+// and scheduler bookkeeping keep their real elapsed-time semantics.
+type FreezeTimeController interface {
+	SetFreezeAnchor(ctx context.Context, anchor time.Time) error
+	SetFreezeTime(ctx context.Context, timestamp time.Time) error
+	ClearFreezeTime(ctx context.Context) error
+}
+
 type HookCfg struct {
 	Pid      uint32
 	IsDocker bool

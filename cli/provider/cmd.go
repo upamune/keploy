@@ -310,6 +310,7 @@ func (c *CmdConfigurator) AddFlags(cmd *cobra.Command) error {
 		cmd.Flags().Bool("global-passthrough", c.cfg.Agent.GlobalPassthrough, "Allow all outgoing calls to be mocked if set to true")
 		cmd.Flags().Bool("capture-packets", c.cfg.Agent.CapturePackets, "Capture raw network packets on the proxy ports and write a pcap file into each test-set directory")
 		cmd.Flags().Bool("opportunistic-tls-intercept", c.cfg.Agent.OpportunisticTLSIntercept, "Sniff and hijack TLS connections in passthrough mode; the captured pcap is decryptable via the keylog")
+		cmd.Flags().Bool("freeze-time", c.cfg.Test.FreezeTime, "Replay each request with the user app wall clock pinned to the recorded timestamp on Linux native runs")
 		cmd.Flags().Uint64P("build-delay", "b", c.cfg.Agent.BuildDelay, "User provided time to wait docker container build")
 		cmd.Flags().UintSlice("pass-through-ports", c.cfg.Agent.PassThroughPorts, "Ports to bypass the proxy server and ignore the traffic")
 		// --ca-java-home is the manual override for the app-aware Java
@@ -404,7 +405,7 @@ func (c *CmdConfigurator) AddUncommonFlags(cmd *cobra.Command) {
 		cmd.Flags().Bool("compare-all", false, "Compare all response body types including non-JSON (default: false, only JSON bodies are compared)")
 		cmd.Flags().Bool("schema-match", false, "Compare only the schema of the response body")
 		cmd.Flags().Bool("update-test-mapping", c.cfg.Test.UpdateTestMapping, "Update the mapping of testcases")
-		cmd.Flags().Bool("freeze-time", c.cfg.Test.FreezeTime, "Write the recorded test timestamp to KEPLOY_FREEZE_TIME and KEPLOY_FREEZE_TIME_FILE before each replay request")
+		cmd.Flags().Bool("freeze-time", c.cfg.Test.FreezeTime, "Replay each request with the user app wall clock pinned to the recorded timestamp on Linux native runs")
 	}
 }
 
@@ -1393,6 +1394,14 @@ func (c *CmdConfigurator) ValidateFlags(ctx context.Context, cmd *cobra.Command)
 			return errors.New(errMsg)
 		}
 		c.cfg.Agent.OpportunisticTLSIntercept = opportunisticTLSIntercept
+
+		freezeTime, err := cmd.Flags().GetBool("freeze-time")
+		if err != nil {
+			errMsg := "failed to read the --freeze-time flag"
+			utils.LogError(c.logger, err, errMsg)
+			return errors.New(errMsg)
+		}
+		c.cfg.Test.FreezeTime = freezeTime
 
 		isdocker, err := cmd.Flags().GetBool("is-docker")
 		if err != nil {

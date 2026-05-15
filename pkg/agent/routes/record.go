@@ -170,8 +170,23 @@ func (a *Agent) HandleBeforeSimulate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var freezeSvc agent.FreezeTimeService
+	if svc, ok := a.svc.(agent.FreezeTimeService); ok {
+		freezeSvc = svc
+		if err := svc.SetFreezeTime(r.Context(), req.TimeStamp); err != nil {
+			a.logger.Error("failed to update freeze-time clock", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	if err := agent.ActiveHooks.BeforeSimulate(r.Context(), req.TimeStamp, req.TestSetID, req.TestCaseName); err != nil {
 		a.logger.Error("failed to execute before simulate hook", zap.Error(err))
+		if freezeSvc != nil {
+			if clearErr := freezeSvc.ClearFreezeTime(r.Context()); clearErr != nil {
+				a.logger.Error("failed to clear freeze-time clock after before-simulate error", zap.Error(clearErr))
+			}
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -185,9 +200,19 @@ func (a *Agent) HandleAfterSimulate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := agent.ActiveHooks.AfterSimulate(r.Context(), req.TestSetID, req.TestCaseName); err != nil {
-		a.logger.Error("failed to execute after simulate hook", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	hookErr := agent.ActiveHooks.AfterSimulate(r.Context(), req.TestSetID, req.TestCaseName)
+	var clearErr error
+	if svc, ok := a.svc.(agent.FreezeTimeService); ok {
+		clearErr = svc.ClearFreezeTime(r.Context())
+	}
+	if hookErr != nil {
+		a.logger.Error("failed to execute after simulate hook", zap.Error(hookErr))
+		http.Error(w, hookErr.Error(), http.StatusInternalServerError)
+		return
+	}
+	if clearErr != nil {
+		a.logger.Error("failed to clear freeze-time clock", zap.Error(clearErr))
+		http.Error(w, clearErr.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
